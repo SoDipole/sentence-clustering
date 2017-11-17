@@ -43,8 +43,9 @@ def correctSpelling(line):
         if not any(st in word for st in stop_sybols):
             try:
                 check = Word(word)
-                if not check.correct and check.spellsafe:
-                    checked_words.append(check.spellsafe.translate({ord(u"-"):" "}))
+                if not check.correct:
+                    if check.spellsafe:
+                        checked_words.append(check.spellsafe.translate({ord(u"-"):" "}))
                 else:
                     checked_words.append(word)
             except:
@@ -215,16 +216,16 @@ def createWordsDataset(m, ind_file, vectors_file,
     print("cntr_mean >> ", cntr_mean)
     print("cntr_std >> ", cntr_std)
     
-    #words_dict = [ [k, (v-cntr_mean)/cntr_std]  for k,v in dict(words_counter).items()]
-    words_dict = [ [k, (v-cntr_mean)/cntr_std ] for k,v in dict(words_counter).items() 
-                   if v <= (cntr_mean+cntr_std)*5]    
+    words_dict = [ [k, (v-cntr_mean)/cntr_std]  for k,v in dict(words_counter).items()]
+    #words_dict = [ [k, (v-cntr_mean)/cntr_std ] for k,v in dict(words_counter).items() 
+                   #if v <= (cntr_mean+cntr_std)*5]    
 
     print("Words cnt: ", len(words_dict))
     print("Words (normalized) [0:10]>> ", words_dict[0:10])
     
     #вывести все слова с частотами в отдельный текстовый файл
     df = pd.DataFrame(words_dict)
-    df.to_csv(words_freq_file, index=False, header=True)
+    df.to_csv(words_freq_file, index=False, header=True, encoding = "utf-8")
     print("Words with frequencies saved in ", words_freq_file)
     
     print("\n--------------------------------------------------------\n")
@@ -251,17 +252,19 @@ def createWordsDataset(m, ind_file, vectors_file,
                     sim = model.similarity(w1, w2)
                 words_ds[i][j] = sim
                 words_ds[j][i] = sim
-            
-    output = open(words_ds_file, "wb")
-    pickle.dump(words_ds, output)
-    output.close()
-    print("Words DS saved in ", words_ds_file)
-        
+                
+    #output = open(words_ds_file, "wb")
+    #pickle.dump(words_ds, output)
+    #output.close()
+    #print("Words DS saved in ", words_ds_file)
+    
     output = open(words_dict_file, "wb")
     pickle.dump(words_dict, output)
     output.close()
     print("Words dictionary saved in ", words_dict_file)
-
+    
+    return words_ds
+    
 #----------------------------------------------------------------------------------------
 def calcWeigth(vw1, vw2, ew) -> float:
     return ew
@@ -299,10 +302,10 @@ def createGraph(words_ds, words, edge_treshold, graph_file_name):
     igraph.summary(g)
     return g
 
-def constructGraph(start_th, words_ds_file, words_dict_file, graph_file_name_pref):
-    pkl_file = open(words_ds_file, "rb")
-    words_ds = pickle.load(pkl_file)
-    pkl_file.close()
+def constructGraph(start_th, words_ds_file, words_dict_file, graph_file_name_pref, words_ds):
+    #pkl_file = open(words_ds_file, "rb")
+    #words_ds = pickle.load(pkl_file)
+    #pkl_file.close()
     print("words_ds len: ", len(words_ds))
     
     pkl_file = open(words_dict_file, "rb")
@@ -927,12 +930,12 @@ def clusterNoise(m, noise_output_file, path, prefix, suffix, start_th, vectors_f
     pkl_file.close()
     max_inds_count = len(inds)
     
-    createWordsDataset(m, noise_output_file+".pkl", vectors_file, words_freq_file, words_ds_file, words_dict_file)
+    words_ds = createWordsDataset(m, noise_output_file+".pkl", vectors_file, words_freq_file, words_ds_file, words_dict_file)
 
-    constructGraph(start_th, words_ds_file, words_dict_file, graph_file_name_pref)
-
+    constructGraph(start_th, words_ds_file, words_dict_file, graph_file_name_pref, words_ds)
+    
     hier_graph = doGraphHierarchicalClustering(start_th, max_inds_count, graph_file_name_pref, hier_graph_file)
-
+    
     doIndicatorsFuzzyClustering(hier_graph, max_inds_count, noise_output_file+".pkl", clustering_results_file)
 
     addGraphProperties(hier_graph_file, clustering_results_file)
@@ -988,8 +991,8 @@ def extractKeyterms(term_extractor, merged_file, keyterms_file):
     for cluster in clusters_data:
         term_counter = collections.Counter()
         for ind in cluster:
-            sentence = correctSpelling(ind[1].lower())
-            term_counter.update([term.normalized for term in term_extractor(sentence)])
+            #sentence = correctSpelling(ind[1].lower())
+            term_counter.update([term.normalized for term in term_extractor(ind[1].lower())])
     
         keyterms = [term for term in term_counter if term_counter[term]]        
         for ind in cluster:
@@ -1008,20 +1011,21 @@ def main():
     stemmer = SnowballStemmer("russian")
     term_extractor = TermExtractor()
     
-    path = "med_inds_clustering/"
-    max_inds_count = 19035
+    category = "liv_standart"
+    path = category+"_clustering/"
+    max_inds_count = 6485
     prefix = "june_inds_"
-    suffix = "med"
-    start_th = 0.5  #start threshold for fuzzy graph
+    suffix = category
+    start_th = 0.65  #start threshold for fuzzy graph
     
-    in_file = path+"june_inds_med_by_kw.xlsx"
-    stopwords_file = path+"Стоп слова Топонимы.xlsx"
-    vectors_file = path+"ruwikiruscorpora_0_300_20.bin"
+    #in_file = path+"June_crime.xlsx"
+    stopwords_file = "Стоп слова Топонимы.xlsx"
+    vectors_file = "ruwikiruscorpora_0_300_20.bin"
     #vectors_file = path+"wiki.ru.vec" #fasttext
-    tags_dict_file = path+"tags_dict.txt"
-    
+    tags_dict_file = "tags_dict.txt"
+
+    ind_file = path+prefix+suffix+"_by_kw.pkl"
     #ind_file = path+prefix+suffix+".pkl"
-    ind_file = path+"june_inds_med_by_kw.pkl"
     words_freq_file = path+prefix+suffix+".csv"
     words_ds_file = path+prefix+"words_ds_"+suffix+".pkl"
     words_dict_file = path+prefix+"words_"+suffix+".pkl"
@@ -1042,27 +1046,27 @@ def main():
     """
     createIndicatorsDataset(m, stemmer, max_inds_count, stopwords_file, in_file, tags_dict_file, ind_file)
     
-    createWordsDataset(m, ind_file, vectors_file, words_freq_file, words_ds_file, words_dict_file)
+    words_ds = createWordsDataset(m, ind_file, vectors_file, words_freq_file, words_ds_file, words_dict_file)
     
-    constructGraph(start_th, words_ds_file, words_dict_file, graph_file_name_pref)
+    constructGraph(start_th, words_ds_file, words_dict_file, graph_file_name_pref, words_ds)
     
     hier_graph = doGraphHierarchicalClustering(start_th, max_inds_count, graph_file_name_pref, hier_graph_file)
     
     doIndicatorsFuzzyClustering(hier_graph, max_inds_count, ind_file, clustering_results_file)
     
     #testHierarchicalClusteringResults(hier_graph_file, clustering_results_file)
-    
+     
     addGraphProperties(hier_graph_file, clustering_results_file)
     
     #transformToSphereGraph(hier_graph_file, sphere_graph_file)
     
     #getRelatedIndicatorsByNode(nodes, sphere_graph_file, clustering_results_file, sphere_graph_by_nodes_file)
     """
-    clusterIndicators(hier_graph_file, clustering_results_file, hdbscan_results_file, min_cluster_size = 18)
+    clusterIndicators(hier_graph_file, clustering_results_file, hdbscan_results_file, min_cluster_size = 8)
     
     classifyIndicators(hdbscan_results_file, vectors_file, hdbscan_results_classified_file, noise_output_file)
     
-    clusterNoise(m, noise_output_file, path, prefix, suffix, start_th, vectors_file, min_cluster_size = 8)
+    clusterNoise(m, noise_output_file, path, prefix, suffix, start_th, vectors_file, min_cluster_size = 3)
     
     mergeClusteredNoise(hdbscan_results_classified_file, noise_output_file, merged_file)
     
